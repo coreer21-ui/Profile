@@ -151,6 +151,8 @@
     background:var(--icon); flex-shrink:0;
   }
   .social.mono .social-ic{ filter: grayscale(1); }
+  .social-ic.brand{ background:transparent; border-radius:0; width:16px; height:16px; }
+  .social-ic.brand img{ width:16px; height:16px; display:block; }
   .music-row{ display:flex; align-items:center; gap:10px; margin-top:18px; }
   .music-btn{
     display:flex; align-items:center; gap:7px; background:none; border:1px solid var(--border);
@@ -245,6 +247,33 @@
     font-size:11.5px; cursor:pointer;
   }
   .catalog-chip .ic{ font-size:12px; }
+  .picker-box{ border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:16px; }
+  .picker-title{ display:flex; align-items:center; gap:8px; font-family:'Space Grotesk',sans-serif; font-size:15px; font-weight:600; }
+  .picker-sub{ color:var(--icon); font-size:12px; margin:4px 0 16px; }
+  .social-picker{ display:grid; grid-template-columns:repeat(auto-fill, minmax(46px, 1fr)); gap:8px; }
+  .pick-tile{
+    aspect-ratio:1/1; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--border); border-radius:var(--radius); background:none; cursor:pointer;
+    color:var(--icon); font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700;
+    transition:border-color .15s ease, transform .15s ease;
+  }
+  .pick-tile:hover{ border-color:var(--accent); transform:translateY(-1px); }
+  .pick-tile img{ width:22px; height:22px; display:block; }
+  .pick-custom{
+    grid-column:1/-1; display:flex; align-items:center; gap:12px; margin-top:10px; padding:10px 12px;
+    border:1px dashed var(--border); border-radius:var(--radius); background:none; cursor:pointer;
+    color:var(--text); text-align:left; font-family:inherit;
+  }
+  .pick-custom:hover{ border-color:var(--accent); }
+  .pick-custom .pc-ic{ width:34px; height:34px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--border); border-radius:var(--radius); font-size:15px; color:var(--icon); }
+  .pick-custom .pc-t{ font-size:13px; font-weight:600; }
+  .pick-custom .pc-s{ font-size:11.5px; color:var(--icon); margin-top:2px; }
+  .row-ic{ width:26px; height:26px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--border); border-radius:var(--radius); color:var(--icon);
+    font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; }
+  .row-ic img{ width:15px; height:15px; display:block; }
+  .list-item.social-row > *:first-child{ flex:0 0 auto; }
   .catalog-chip.active{ border-color:var(--accent); color:var(--text); background:color-mix(in srgb, var(--accent) 12%, transparent); }
   .crop-viewport{
     width:280px; height:280px; overflow:hidden; position:relative; margin:0 auto;
@@ -542,6 +571,11 @@
 
     <div class="panel" data-panel="links">
       <div class="section-title">Socials</div>
+      <div class="picker-box">
+        <div class="picker-title"><span>🔗</span><span>Link your social media profiles.</span></div>
+        <div class="picker-sub">Pick a social media to add to your profile.</div>
+        <div class="social-picker" id="socialPicker"></div>
+      </div>
       <div id="socialsList"><div class="list-item"><input type="text" placeholder="Label (e.g. Discord)" style="max-width: 140px;"><input type="url" placeholder="https://..."><button class="btn btn-sm btn-danger">Remove</button></div></div>
       <button class="btn btn-sm add-row" id="addSocial">+ Add social</button>
       <div class="section-title">Badges</div>
@@ -687,6 +721,62 @@
   var titleTimer = null;
 
   // ---------- helpers ----------
+  // Turns "discord.gg/abc" into "https://discord.gg/abc". Without a scheme the
+  // browser treats the value as a path on this site, which is why bare links
+  // used to land on a 404 from the host instead of the real profile.
+  function normalizeUrl(u){
+    u = (u || '').trim();
+    if (!u) return '';
+    if (/^(https?:|mailto:|tel:)/i.test(u)) return u;
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u)) return 'mailto:' + u;
+    // No dot means it is a handle, not an address - refuse it rather than
+    // sending visitors to a dead path on this domain.
+    if (u.indexOf('.') === -1) return '';
+    return 'https://' + u.replace(/^\/+/, '');
+  }
+  var SOCIAL_BRANDS = [
+    { slug:'discord',    match:/discord(app)?\.(com|gg)/i },
+    { slug:'telegram',   match:/(t\.me|telegram\.(me|org))/i },
+    { slug:'instagram',  match:/instagram\.com/i },
+    { slug:'x',          match:/(twitter\.com|(^|\/\/|\.)x\.com)/i },
+    { slug:'tiktok',     match:/tiktok\.com/i },
+    { slug:'youtube',    match:/(youtube\.com|youtu\.be)/i },
+    { slug:'github',     match:/github\.com/i },
+    { slug:'spotify',    match:/spotify\.com/i },
+    { slug:'soundcloud', match:/soundcloud\.com/i },
+    { slug:'twitch',     match:/twitch\.tv/i },
+    { slug:'steam',      match:/steam(community|powered)\.com/i },
+    { slug:'roblox',     match:/roblox\.com/i },
+    { slug:'reddit',     match:/reddit\.com/i },
+    { slug:'snapchat',   match:/snapchat\.com/i },
+    { slug:'pinterest',  match:/pinterest\./i },
+    { slug:'linkedin',   match:/linkedin\.com/i },
+    { slug:'facebook',   match:/facebook\.com/i },
+    { slug:'lastdotfm',  match:/last\.fm/i },
+    { slug:'osu',        match:/osu\.ppy\.sh/i },
+    { slug:'kick',       match:/kick\.com/i },
+    { slug:'patreon',    match:/patreon\.com/i },
+    { slug:'kofi',       match:/ko-fi\.com/i },
+    { slug:'gmail',      match:/^mailto:/i }
+  ];
+  // Custom domains won't match, so the label is used as a second chance:
+  // labelling a link "Discord" gets the Discord logo whatever the URL is.
+  var LABEL_ALIASES = { twitter:'x', 'x':'x', tg:'telegram', ig:'instagram', yt:'youtube',
+    gh:'github', 'lastfm':'lastdotfm', 'ko-fi':'kofi', mail:'gmail', email:'gmail' };
+  function brandSlugFor(url, label){
+    var i;
+    for (i = 0; i < SOCIAL_BRANDS.length; i++){
+      if (SOCIAL_BRANDS[i].match.test(url || '')) return SOCIAL_BRANDS[i].slug;
+    }
+    var key = String(label || '').toLowerCase().replace(/[^a-z-]/g, '');
+    if (!key) return '';
+    if (LABEL_ALIASES[key]) return LABEL_ALIASES[key];
+    for (i = 0; i < SOCIAL_BRANDS.length; i++){
+      if (SOCIAL_BRANDS[i].slug === key) return key;
+    }
+    return '';
+  }
+
   function isVideoUrl(url){
     url = url || '';
     if (url.indexOf('data:') === 0) return /^data:video\//i.test(url);
@@ -895,10 +985,29 @@
       if (!s.url) return;
       var a = document.createElement('a');
       a.className = 'social' + (data.general.glowSocials ? ' glow' : '') + (data.other.monochromeIcons ? ' mono' : '');
-      a.href = s.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      var href = normalizeUrl(s.url);
+      if (!href) return;
+      a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
       var ic = document.createElement('span');
       ic.className = 'social-ic';
-      ic.textContent = (s.label||'?').trim().charAt(0).toUpperCase();
+      var letter = (s.label || s.url || '?').trim().charAt(0).toUpperCase();
+      var slug = s.icon || brandSlugFor(href, s.label);
+      if (slug){
+        var iconColor = String((data.colors && data.colors.icon) || '#ffffff').replace('#','');
+        var img = document.createElement('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        img.addEventListener('error', function(){
+          ic.className = 'social-ic';
+          ic.innerHTML = '';
+          ic.textContent = letter;
+        });
+        img.src = 'https://cdn.simpleicons.org/' + slug + '/' + iconColor;
+        ic.className = 'social-ic brand';
+        ic.appendChild(img);
+      } else {
+        ic.textContent = letter;
+      }
       a.appendChild(ic);
       var lbl = document.createElement('span');
       lbl.textContent = s.label || s.url;
@@ -1354,6 +1463,7 @@
     });
     updateSizeNote(d);
 
+    renderSocialPicker();
     renderSocialsList(d);
     renderBadgeCatalog(d);
     renderBadgesList(d);
@@ -1415,18 +1525,111 @@
     document.getElementById('f_'+id+'Txt').value = val;
   }
 
+  var SOCIAL_PLATFORMS = [
+    { slug:'snapchat',   name:'Snapchat',     pre:'snapchat.com/add/' },
+    { slug:'youtube',    name:'YouTube',      pre:'youtube.com/@' },
+    { slug:'discord',    name:'Discord',      pre:'discord.gg/' },
+    { slug:'spotify',    name:'Spotify',      pre:'open.spotify.com/user/' },
+    { slug:'instagram',  name:'Instagram',    pre:'instagram.com/' },
+    { slug:'x',          name:'X',            pre:'x.com/' },
+    { slug:'tiktok',     name:'TikTok',       pre:'tiktok.com/@' },
+    { slug:'telegram',   name:'Telegram',     pre:'t.me/' },
+    { slug:'soundcloud', name:'SoundCloud',   pre:'soundcloud.com/' },
+    { slug:'paypal',     name:'PayPal',       pre:'paypal.me/' },
+    { slug:'github',     name:'GitHub',       pre:'github.com/' },
+    { slug:'roblox',     name:'Roblox',       pre:'roblox.com/users/' },
+    { slug:'steam',      name:'Steam',        pre:'steamcommunity.com/id/' },
+    { slug:'twitch',     name:'Twitch',       pre:'twitch.tv/' },
+    { slug:'reddit',     name:'Reddit',       pre:'reddit.com/user/' },
+    { slug:'kick',       name:'Kick',         pre:'kick.com/' },
+    { slug:'osu',        name:'osu!',         pre:'osu.ppy.sh/users/' },
+    { slug:'playstation',name:'PlayStation',  pre:'' },
+    { slug:'xbox',       name:'Xbox',         pre:'' },
+    { slug:'applemusic', name:'Apple Music',  pre:'music.apple.com/profile/' },
+    { slug:'lastdotfm',  name:'Last.fm',      pre:'last.fm/user/' },
+    { slug:'pinterest',  name:'Pinterest',    pre:'pinterest.com/' },
+    { slug:'facebook',   name:'Facebook',     pre:'facebook.com/' },
+    { slug:'threads',    name:'Threads',      pre:'threads.net/@' },
+    { slug:'bluesky',    name:'Bluesky',      pre:'bsky.app/profile/' },
+    { slug:'linkedin',   name:'LinkedIn',     pre:'linkedin.com/in/' },
+    { slug:'vk',         name:'VK',           pre:'vk.com/' },
+    { slug:'patreon',    name:'Patreon',      pre:'patreon.com/' },
+    { slug:'kofi',       name:'Ko-fi',        pre:'ko-fi.com/' },
+    { slug:'cashapp',    name:'Cash App',     pre:'cash.app/$' },
+    { slug:'bitcoin',    name:'Bitcoin',      pre:'' },
+    { slug:'ethereum',   name:'Ethereum',     pre:'' },
+    { slug:'litecoin',   name:'Litecoin',     pre:'' },
+    { slug:'solana',     name:'Solana',       pre:'' },
+    { slug:'monero',     name:'Monero',       pre:'' },
+    { slug:'gmail',      name:'Email',        pre:'' }
+  ];
+  // Brands whose own colour is black or near-black would vanish on the dark panel.
+  var DARK_BRANDS = { x:1, github:1, tiktok:1, threads:1, steam:1 };
+  function brandIconUrl(slug, color){
+    return 'https://cdn.simpleicons.org/' + slug + (color ? '/' + String(color).replace('#','') : '');
+  }
+  // Small <img> of a brand logo that falls back to a letter if the CDN is unreachable.
+  function brandImg(host, slug, color, letter){
+    var img = document.createElement('img');
+    img.alt = '';
+    img.loading = 'lazy';
+    img.addEventListener('error', function(){ host.innerHTML = ''; host.textContent = letter; });
+    img.src = brandIconUrl(slug, color);
+    host.appendChild(img);
+    return img;
+  }
+  function addSocialEntry(entry){
+    draft.socials = draft.socials || [];
+    draft.socials.push(entry);
+    renderSocialsList(draft);
+    var rows = document.getElementById('socialsList').querySelectorAll('input[type=url]');
+    var last = rows[rows.length - 1];
+    if (last) { last.focus(); }
+  }
+  function renderSocialPicker(){
+    var wrap = document.getElementById('socialPicker');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    SOCIAL_PLATFORMS.forEach(function(p){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pick-tile';
+      b.title = p.name;
+      brandImg(b, p.slug, DARK_BRANDS[p.slug] ? 'ffffff' : '', p.name.charAt(0));
+      b.addEventListener('click', function(){
+        addSocialEntry({ label:p.name, url:p.pre || '', icon:p.slug });
+      });
+      wrap.appendChild(b);
+    });
+    var custom = document.createElement('button');
+    custom.type = 'button';
+    custom.className = 'pick-custom';
+    custom.innerHTML = '<span class="pc-ic">\u2295</span><span><span class="pc-t">Add Custom URL</span>' +
+      '<span class="pc-s" style="display:block;">Use your own URL and label \u2014 the icon is matched automatically.</span></span>';
+    custom.addEventListener('click', function(){ addSocialEntry({ label:'', url:'' }); });
+    wrap.appendChild(custom);
+  }
+
   function renderSocialsList(d){
     var wrap = document.getElementById('socialsList');
     wrap.innerHTML = '';
     (d.socials||[]).forEach(function(s, idx){
-      var row = document.createElement('div'); row.className = 'list-item';
+      var row = document.createElement('div'); row.className = 'list-item social-row';
+      var rowIc = document.createElement('span'); rowIc.className = 'row-ic';
+      (function(){
+        var slug = s.icon || brandSlugFor(normalizeUrl(s.url), s.label);
+        var letter = (s.label || s.url || '?').trim().charAt(0).toUpperCase();
+        if (slug) brandImg(rowIc, slug, DARK_BRANDS[slug] ? 'ffffff' : '', letter);
+        else rowIc.textContent = letter;
+      })();
       var lbl = document.createElement('input'); lbl.type='text'; lbl.placeholder='Label (e.g. Discord)'; lbl.value = s.label || ''; lbl.style.maxWidth='140px';
       var url = document.createElement('input'); url.type='url'; url.placeholder='https://...'; url.value = s.url || '';
       lbl.addEventListener('input', function(){ s.label = lbl.value; });
       url.addEventListener('input', function(){ s.url = url.value; });
+      url.addEventListener('blur', function(){ url.value = normalizeUrl(url.value); s.url = url.value; });
       var del = document.createElement('button'); del.className='btn btn-sm btn-danger'; del.textContent='Remove';
       del.addEventListener('click', function(){ d.socials.splice(idx,1); renderSocialsList(d); });
-      row.appendChild(lbl); row.appendChild(url); row.appendChild(del);
+      row.appendChild(rowIc); row.appendChild(lbl); row.appendChild(url); row.appendChild(del);
       wrap.appendChild(row);
     });
   }
