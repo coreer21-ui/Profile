@@ -1,8 +1,17 @@
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
 import { defaultProfile } from './defaultProfile';
 
 const USER_KEY = (username) => `user:${username.toLowerCase()}`;
 const ALL_USERS_KEY = 'users:all';
+
+// Reuse one connection across invocations (important in dev with hot-reload,
+// and avoids opening a fresh connection on every serverless invocation).
+function getClient() {
+  if (!global.__redisClient) {
+    global.__redisClient = new Redis(process.env.REDIS_URL);
+  }
+  return global.__redisClient;
+}
 
 export function normalizeUsername(raw) {
   return (raw || '')
@@ -12,17 +21,20 @@ export function normalizeUsername(raw) {
 }
 
 export async function getUserRecord(username) {
+  const redis = getClient();
   const key = USER_KEY(normalizeUsername(username));
-  const record = await kv.get(key);
-  return record || null;
+  const raw = await redis.get(key);
+  return raw ? JSON.parse(raw) : null;
 }
 
 export async function saveUserRecord(username, record) {
+  const redis = getClient();
   const key = USER_KEY(normalizeUsername(username));
-  await kv.set(key, record);
+  await redis.set(key, JSON.stringify(record));
 }
 
 export async function createUser(username, passwordHash) {
+  const redis = getClient();
   const clean = normalizeUsername(username);
   if (!clean) throw new Error('Invalid username');
   const existing = await getUserRecord(clean);
@@ -34,17 +46,19 @@ export async function createUser(username, passwordHash) {
     profile: defaultProfile(clean)
   };
   await saveUserRecord(clean, record);
-  await kv.sadd(ALL_USERS_KEY, clean);
+  await redis.sadd(ALL_USERS_KEY, clean);
   return record;
 }
 
 export async function listUsernames() {
-  const members = await kv.smembers(ALL_USERS_KEY);
+  const redis = getClient();
+  const members = await redis.smembers(ALL_USERS_KEY);
   return (members || []).sort();
 }
 
 export async function deleteUser(username) {
+  const redis = getClient();
   const clean = normalizeUsername(username);
-  await kv.del(USER_KEY(clean));
-  await kv.srem(ALL_USERS_KEY, clean);
+  await redis.del(USER_KEY(clean));
+  await redis.srem(ALL_USERS_KEY, clean);
 }
