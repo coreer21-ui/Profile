@@ -1,7 +1,7 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'guns-bio',
+  title: 'Fauxx',
   description: 'Personal bio pages'
 };
 
