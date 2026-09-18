@@ -53,9 +53,33 @@ immediately at `yourdomain.com/their-username`, even before they've edited
 anything (it starts from sensible defaults).
 
 They log in at `yourdomain.com/login` and land on `/edit`, which is the same
-kind of dashboard as before — assets, general, layout, typography, entrance,
-colors, socials & badges, other, and a security tab to change their own
-password. Saving there is instant; there's no file to redeploy anymore.
+kind of dashboard as before — assets, general, layout, typography, effects,
+entrance, colors, socials & badges, gallery, other, and a security tab to
+change their own password. Saving there is instant; there's no file to
+redeploy anymore.
+
+### Admin tools
+
+`/admin` is more than account creation now. Expand any user row to:
+- **Grant or revoke official badges** (Owner, Verified, VIP, etc.) — this is
+  admin-only by design. Users can still add their own free-text custom
+  badges from their editor, but the official catalog badges can only be
+  granted here. This is enforced server-side, not just hidden in the UI, so
+  a user can't grant themselves one by editing a request.
+- **Suspend / unsuspend** a page. A suspended page shows a plain
+  "unavailable" notice to visitors (and to the owner, though you can still
+  preview it yourself as admin), and the owner can't save edits while
+  suspended.
+- **Reset a password** directly, if someone forgets theirs.
+- See **view counts** (real visitor counts, tracked in KV — the owner's own
+  visits and your admin previews don't count toward it) and **last edited**
+  time for every account at a glance.
+- **Delete** an account entirely.
+
+### Profile content
+
+Beyond the original set: **pronouns** (shown next to location), and a
+**photo gallery** (up to 8 extra images in a small grid below the socials).
 
 ## Local development
 
