@@ -132,6 +132,9 @@ body.has-cursor, body.has-cursor *{ cursor: var(--custom-cursor, auto); }
 .badge.glow{ box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent); border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); }
 
 .socials{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-top:18px; }
+.gallery-grid{ display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-top:18px; }
+.gallery-grid img{ width:100%; aspect-ratio:1; object-fit:cover; border-radius:var(--card-radius, 3px); border:1px solid var(--border); }
+@media (max-width:480px){ .gallery-grid{ grid-template-columns:repeat(3, 1fr); } }
 .social{
   display:flex; align-items:center; gap:8px; text-decoration:none; padding:7px 10px;
   border:1px solid var(--border); border-radius:var(--card-radius, 3px); color:var(--text); font-size:12.5px;
