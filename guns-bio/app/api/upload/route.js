@@ -3,7 +3,7 @@ import { put } from '@vercel/blob';
 import { getUserFromRequestCookies } from '../../../lib/session';
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8MB per file
-const ALLOWED_FIELDS = new Set(['background', 'avatar', 'audio', 'cursor']);
+const ALLOWED_FIELDS = new Set(['background', 'avatar', 'audio', 'cursor', 'font']);
 
 export async function POST(request) {
   const username = getUserFromRequestCookies(request);

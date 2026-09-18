@@ -2,7 +2,7 @@ import './globals.css';
 
 export const metadata = {
   title: 'Fauxx',
-  description: 'Personal bio pages'
+  description: 'Private bio pages'
 };
 
 export default function RootLayout({ children }) {

@@ -1,4 +1,4 @@
-# guns-bio
+# Fauxx
 
 Multi-user bio pages for a closed friend group. You (the admin) create an
 account for each friend; they log in with a username and password to edit
@@ -15,19 +15,19 @@ This is a real app now, not one HTML file:
   stay small no matter how many people use this.
 - **Editing saves instantly** — no more download-and-redeploy loop.
 
-### Not yet ported from the single-file version
-To keep this first version correct and shippable, a few of the more elaborate
-visual extras were left out for now — straightforward to add back later if
-you want them:
-- Avatar cropping tool (uploads just use the image as-is)
-- Custom font file upload (curated Google Fonts still work)
-- Cursor trail effect
-- Particles background effect (scanlines/grain/vignette still work)
+### Feature parity with the single-file version
+Everything from the single-file version is ported, including avatar
+cropping, custom font uploads, the cursor trail effect, and the particles
+background effect.
 
 ## One-time setup
 
-1. **Create the project on Vercel.** Push this folder to a GitHub repo, then
-   "Import Project" on vercel.com and point it at that repo.
+1. **Get this into your GitHub repo.** If you're replacing an existing
+   `guns-bio` folder in your repo with this one, delete the old folder and
+   add this `fauxx` folder in its place (or at the repo root — see the Vercel
+   step below). Then in your Vercel project, update **Settings → General →
+   Root Directory** to point at wherever this folder ends up, so Vercel
+   builds the right thing.
 
 2. **Add storage.** In the Vercel project → Storage tab:
    - Create a **KV** database and connect it to this project (this fills in

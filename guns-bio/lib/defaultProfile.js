@@ -39,14 +39,17 @@ export function defaultProfile(displayName) {
       avatarPadding: 0,
       fontChoice: 'system',
       enterEnabled: true,
-      enterText: 'click to enter...'
+      enterText: 'click to enter...',
+      cursorTrail: 'none'
     },
     assets: {
       backgroundUrl: '',
       backgroundType: 'auto',
       audioUrl: '',
       avatarUrl: '',
-      cursorUrl: ''
+      cursorUrl: '',
+      fontUrl: '',
+      fontFileName: ''
     },
     colors: {
       accent: '#6C5CE7',
