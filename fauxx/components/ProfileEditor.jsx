@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { defaultProfile } from '../lib/defaultProfile';
 import Cropper from './Cropper';
+import { upload } from '@vercel/blob/client';
 
 const PANELS = [
   { id: 'assets', label: 'Assets', title: 'Assets', sub: 'Upload files or paste links' },
@@ -71,22 +72,47 @@ export default function ProfileEditor({ username }) {
     }
   }
 
-  async function uploadRaw(field, file) {
-    if (file.size > 8 * 1024 * 1024) {
-      showToast('That file is over 8MB', true);
-      return null;
-    }
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('field', field);
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      showToast(data.error || 'Upload failed', true);
-      return null;
-    }
-    return data.url;
+async function uploadRaw(field, file) {
+  if (!file) return null;
+
+  const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+
+  if (file.size > MAX_BYTES) {
+    showToast('That file is over 100MB', true);
+    return null;
   }
+
+  try {
+    const safeName = (file.name || 'upload')
+      .replace(/[^a-zA-Z0-9.\-_]/g, '');
+
+    const pathname = `${field}-${Date.now()}-${safeName}`;
+
+    const blob = await upload(pathname, file, {
+      access: 'public',
+      handleUploadUrl: '/api/upload',
+
+      // Use multipart uploads for files over 4 MB.
+      multipart: file.size > 4 * 1024 * 1024,
+
+      clientPayload: JSON.stringify({
+        field
+      }),
+
+      onUploadProgress(event) {
+        if (event?.percentage != null) {
+          showToast(`Uploading ${Math.round(event.percentage)}%`);
+        }
+      }
+    });
+
+    return blob.url;
+  } catch (error) {
+    console.error('Upload failed:', error);
+    showToast(error?.message || 'Upload failed', true);
+    return null;
+  }
+}
 
   async function uploadFile(field, file) {
     const url = await uploadRaw(field, file);
