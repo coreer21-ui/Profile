@@ -40,19 +40,117 @@ export default function ProfileView({ username, profile, isOwner }) {
     }
   }, [c, g, a.cursorUrl]);
 
-  // Curated Google Font.
+  // Font: curated Google Font, or a custom uploaded file.
   useEffect(() => {
-    const preset = FONT_PRESETS[g.fontChoice] || FONT_PRESETS.system;
-    let link;
-    if (preset.link) {
-      link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = `https://fonts.googleapis.com/css2?family=${preset.link}&display=swap`;
-      document.head.appendChild(link);
+    let link, styleTag;
+    if (g.fontChoice === 'custom' && a.fontUrl) {
+      styleTag = document.createElement('style');
+      styleTag.textContent = `@font-face{ font-family:"CustomUserFont"; src:url(${a.fontUrl}); font-display:swap; }`;
+      document.head.appendChild(styleTag);
+      document.documentElement.style.setProperty('--body-font', "'CustomUserFont', sans-serif");
+    } else {
+      const preset = FONT_PRESETS[g.fontChoice] || FONT_PRESETS.system;
+      if (preset.link) {
+        link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = `https://fonts.googleapis.com/css2?family=${preset.link}&display=swap`;
+        document.head.appendChild(link);
+      }
+      document.documentElement.style.setProperty('--body-font', preset.family);
     }
-    document.documentElement.style.setProperty('--body-font', preset.family);
-    return () => { if (link) link.remove(); };
-  }, [g.fontChoice]);
+    return () => { if (link) link.remove(); if (styleTag) styleTag.remove(); };
+  }, [g.fontChoice, a.fontUrl]);
+
+  // Cursor trail: sparkle or ribbon following the pointer, tinted with the accent color.
+  const trailCanvasRef = useRef(null);
+  useEffect(() => {
+    const style = g.cursorTrail || 'none';
+    const canvas = trailCanvasRef.current;
+    if (style === 'none' || !canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    let points = [];
+    let raf;
+    function onResize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    function onMove(e) {
+      points.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+      if (points.length > 40) points.shift();
+    }
+    function loop() {
+      raf = requestAnimationFrame(loop);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const now = Date.now();
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6C5CE7';
+      points = points.filter((p) => now - p.t < 500);
+      if (style === 'sparkle') {
+        points.forEach((p) => {
+          const age = (now - p.t) / 500;
+          ctx.globalAlpha = 1 - age;
+          ctx.fillStyle = accent;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 3 * (1 - age) + 1, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      } else if (style === 'ribbon') {
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        for (let i = 1; i < points.length; i++) {
+          const pA = points[i - 1], pB = points[i];
+          const age = (now - pB.t) / 500;
+          ctx.globalAlpha = 1 - age;
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = 3 * (1 - age) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(pA.x, pA.y);
+          ctx.lineTo(pB.x, pB.y);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+    window.addEventListener('resize', onResize);
+    document.addEventListener('pointermove', onMove);
+    loop();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onResize);
+      document.removeEventListener('pointermove', onMove);
+    };
+  }, [g.cursorTrail]);
+
+  // Particles background effect: soft dots drifting upward, behind the card.
+  const particlesCanvasRef = useRef(null);
+  useEffect(() => {
+    if (g.backgroundEffect !== 'particles') return;
+    const canvas = particlesCanvasRef.current;
+    if (!canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    const particles = Array.from({ length: 60 }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.6 + 0.4,
+      s: Math.random() * 0.4 + 0.15
+    }));
+    let raf;
+    function onResize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    function loop() {
+      raf = requestAnimationFrame(loop);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      particles.forEach((p) => {
+        p.y -= p.s;
+        if (p.y < -4) { p.y = canvas.height + 4; p.x = Math.random() * canvas.width; }
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    window.addEventListener('resize', onResize);
+    loop();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', onResize); };
+  }, [g.backgroundEffect]);
 
   // Name effect: typewriter needs imperative typing; gradient/glitch are pure CSS (handled in JSX).
   useEffect(() => {
@@ -145,7 +243,9 @@ export default function ProfileView({ username, profile, isOwner }) {
         ))}
       </div>
       <div id="bgDim" />
-      {g.backgroundEffect !== 'none' && <div id="bgEffect" className={g.backgroundEffect} />}
+      {g.backgroundEffect !== 'none' && g.backgroundEffect !== 'particles' && <div id="bgEffect" className={g.backgroundEffect} />}
+      {g.backgroundEffect === 'particles' && <canvas id="particlesCanvas" ref={particlesCanvasRef} />}
+      {g.cursorTrail && g.cursorTrail !== 'none' && <canvas id="trailCanvas" ref={trailCanvasRef} />}
 
       {!gateHidden && (
         <div id="enterGate" className={gateGone ? 'gone' : ''} onClick={handleEnter}>
