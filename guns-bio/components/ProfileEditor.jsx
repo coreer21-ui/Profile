@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { BADGE_CATALOG, defaultProfile } from '../lib/defaultProfile';
+import { defaultProfile } from '../lib/defaultProfile';
 import Cropper from './Cropper';
 
 const PANELS = [
@@ -12,6 +12,7 @@ const PANELS = [
   { id: 'entrance', label: 'Entrance', title: 'Entrance', sub: 'Your click-to-enter screen' },
   { id: 'colors', label: 'Colors', title: 'Colors', sub: 'Your palette' },
   { id: 'links', label: 'Socials & badges', title: 'Socials & badges', sub: 'Manage your links and badges' },
+  { id: 'gallery', label: 'Gallery', title: 'Gallery', sub: 'A few extra photos on your profile' },
   { id: 'other', label: 'Other', title: 'Other', sub: 'Extra toggles' },
   { id: 'security', label: 'Security', title: 'Security', sub: 'Password' }
 ];
@@ -137,6 +138,7 @@ export default function ProfileEditor({ username }) {
         {panel === 'entrance' && <EntrancePanel profile={profile} set={set} />}
         {panel === 'colors' && <ColorsPanel profile={profile} set={set} />}
         {panel === 'links' && <LinksPanel profile={profile} setProfile={setProfile} />}
+        {panel === 'gallery' && <GalleryPanel profile={profile} setProfile={setProfile} uploadRaw={uploadRaw} showToast={showToast} />}
         {panel === 'other' && <OtherPanel profile={profile} set={set} />}
         {panel === 'security' && <SecurityPanel showToast={showToast} />}
       </div>
@@ -299,6 +301,12 @@ function GeneralPanel({ profile, set, setProfile }) {
           <label>Location</label>
           <input type="text" value={g.location} onChange={(e) => set('general', 'location', e.target.value)} />
         </div>
+        <div className="field">
+          <label>Pronouns</label>
+          <input type="text" value={g.pronouns || ''} onChange={(e) => set('general', 'pronouns', e.target.value)} placeholder="e.g. they/them" />
+        </div>
+      </div>
+      <div className="row">
         <div className="field">
           <label>Status text</label>
           <input type="text" value={g.statusText} onChange={(e) => set('general', 'statusText', e.target.value)} />
@@ -493,6 +501,7 @@ function ColorsPanel({ profile, set }) {
 function LinksPanel({ profile, setProfile }) {
   const socials = profile.socials || [];
   const badges = profile.badges || [];
+  const catalogBadges = badges.filter((b) => b.type === 'catalog');
 
   function updateSocial(i, key, value) {
     const next = socials.map((s, idx) => (idx === i ? { ...s, [key]: value } : s));
@@ -501,13 +510,6 @@ function LinksPanel({ profile, setProfile }) {
   function addSocial() { setProfile((p) => ({ ...p, socials: [...(p.socials || []), { label: '', url: '' }] })); }
   function removeSocial(i) { setProfile((p) => ({ ...p, socials: (p.socials || []).filter((_, idx) => idx !== i) })); }
 
-  function toggleCatalogBadge(cat) {
-    const exists = badges.some((b) => b.type === 'catalog' && b.id === cat.id);
-    const next = exists
-      ? badges.filter((b) => !(b.type === 'catalog' && b.id === cat.id))
-      : [...badges, { type: 'catalog', id: cat.id, label: cat.label, icon: cat.icon }];
-    setProfile((p) => ({ ...p, badges: next }));
-  }
   function updateCustomBadge(i, value) {
     const next = badges.map((b, idx) => (idx === i ? { ...b, label: value } : b));
     setProfile((p) => ({ ...p, badges: next }));
@@ -527,17 +529,20 @@ function LinksPanel({ profile, setProfile }) {
       ))}
       <button className="btn btn-sm" onClick={addSocial}>+ Add social</button>
 
-      <div className="section-title">Badges</div>
+      <div className="section-title">Official badges</div>
+      <p className="hint-text" style={{ marginBottom: 10 }}>
+        These are granted by the site admin, not chosen here — reach out to them if you think you should have one.
+      </p>
       <div className="badge-catalog">
-        {BADGE_CATALOG.map((cat) => {
-          const active = badges.some((b) => b.type === 'catalog' && b.id === cat.id);
-          return (
-            <button key={cat.id} type="button" className={'catalog-chip' + (active ? ' active' : '')} onClick={() => toggleCatalogBadge(cat)}>
-              <span>{cat.icon}</span><span>{cat.label}</span>
-            </button>
-          );
-        })}
+        {catalogBadges.length === 0 && <span className="hint-text">None yet</span>}
+        {catalogBadges.map((b) => (
+          <span key={b.id} className="catalog-chip active" style={{ cursor: 'default' }}>
+            <span>{b.icon}</span><span>{b.label}</span>
+          </span>
+        ))}
       </div>
+
+      <div className="section-title">Custom badges</div>
       {badges.filter((b) => b.type === 'custom').map((b) => {
         const i = badges.indexOf(b);
         return (
@@ -548,6 +553,68 @@ function LinksPanel({ profile, setProfile }) {
         );
       })}
       <button className="btn btn-sm" onClick={addCustomBadge}>+ Add custom badge</button>
+    </div>
+  );
+}
+
+function GalleryPanel({ profile, setProfile, uploadRaw, showToast }) {
+  const gallery = profile.gallery || [];
+  const fileRef = useRef(null);
+  const MAX_IMAGES = 8;
+
+  function addUrl(url) {
+    if (!url) return;
+    if (gallery.length >= MAX_IMAGES) { showToast(`You can have up to ${MAX_IMAGES} photos`, true); return; }
+    setProfile((p) => ({ ...p, gallery: [...(p.gallery || []), url] }));
+  }
+  function removeAt(i) {
+    setProfile((p) => ({ ...p, gallery: (p.gallery || []).filter((_, idx) => idx !== i) }));
+  }
+
+  async function handleFiles(files) {
+    const remaining = MAX_IMAGES - gallery.length;
+    if (remaining <= 0) { showToast(`You can have up to ${MAX_IMAGES} photos`, true); return; }
+    const toUpload = Array.from(files).slice(0, remaining);
+    for (const file of toUpload) {
+      const url = await uploadRaw('gallery', file);
+      if (url) addUrl(url);
+    }
+  }
+
+  return (
+    <div>
+      <p className="hint-text" style={{ marginBottom: 16 }}>
+        Up to {MAX_IMAGES} extra photos, shown in a small grid on your page.
+      </p>
+      <div className="grid2" style={{ marginBottom: 16 }}>
+        {gallery.map((url, i) => (
+          <div key={i} style={{ position: 'relative' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt="" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border)' }} />
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={() => removeAt(i)}
+              style={{ position: 'absolute', top: 4, right: 4, background: '#0D1016' }}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="upload-row">
+        <button type="button" className="btn btn-sm" onClick={() => fileRef.current.click()} disabled={gallery.length >= MAX_IMAGES}>
+          Upload photos
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => { if (e.target.files.length) handleFiles(e.target.files); e.target.value = ''; }}
+        />
+        <span className="upload-status">{gallery.length}/{MAX_IMAGES}</span>
+      </div>
     </div>
   );
 }

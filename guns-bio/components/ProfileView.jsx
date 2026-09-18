@@ -270,7 +270,9 @@ export default function ProfileView({ username, profile, isOwner }) {
                   g.displayName || 'yourname'
                 )}
               </div>
-              <div className="meta-line">{g.location || ''}</div>
+              <div className="meta-line">
+                {[g.location, g.pronouns].filter(Boolean).join(' · ')}
+              </div>
             </div>
           </div>
 
@@ -298,6 +300,15 @@ export default function ProfileView({ username, profile, isOwner }) {
                   <span className="social-ic">{(s.label || '?').trim().charAt(0).toUpperCase()}</span>
                   <span>{s.label || s.url}</span>
                 </a>
+              ))}
+            </div>
+          )}
+
+          {(profile.gallery || []).length > 0 && (
+            <div className="gallery-grid">
+              {profile.gallery.map((url, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={url} alt="" />
               ))}
             </div>
           )}
