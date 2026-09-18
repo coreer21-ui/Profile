@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { BADGE_CATALOG, defaultProfile } from '../lib/defaultProfile';
+import Cropper from './Cropper';
 
 const PANELS = [
   { id: 'assets', label: 'Assets', title: 'Assets', sub: 'Upload files or paste links' },
   { id: 'general', label: 'General', title: 'General', sub: 'Profile text and description' },
   { id: 'layout', label: 'Layout', title: 'Layout', sub: 'Borders, radius and spacing' },
   { id: 'typography', label: 'Typography', title: 'Typography', sub: 'Font for your name and bio' },
+  { id: 'effects', label: 'Effects', title: 'Effects', sub: 'Cursor trail and background particles' },
   { id: 'entrance', label: 'Entrance', title: 'Entrance', sub: 'Your click-to-enter screen' },
   { id: 'colors', label: 'Colors', title: 'Colors', sub: 'Your palette' },
   { id: 'links', label: 'Socials & badges', title: 'Socials & badges', sub: 'Manage your links and badges' },
@@ -68,10 +70,10 @@ export default function ProfileEditor({ username }) {
     }
   }
 
-  async function uploadFile(field, file) {
+  async function uploadRaw(field, file) {
     if (file.size > 8 * 1024 * 1024) {
       showToast('That file is over 8MB', true);
-      return;
+      return null;
     }
     const formData = new FormData();
     formData.append('file', file);
@@ -80,10 +82,16 @@ export default function ProfileEditor({ username }) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       showToast(data.error || 'Upload failed', true);
-      return;
+      return null;
     }
+    return data.url;
+  }
+
+  async function uploadFile(field, file) {
+    const url = await uploadRaw(field, file);
+    if (!url) return;
     const assetKey = field === 'avatar' ? 'avatarUrl' : field === 'background' ? 'backgroundUrl' : field === 'audio' ? 'audioUrl' : 'cursorUrl';
-    set('assets', assetKey, data.url);
+    set('assets', assetKey, url);
     showToast('Uploaded');
   }
 
@@ -121,10 +129,11 @@ export default function ProfileEditor({ username }) {
           </button>
         </div>
 
-        {panel === 'assets' && <AssetsPanel profile={profile} set={set} uploadFile={uploadFile} />}
+        {panel === 'assets' && <AssetsPanel profile={profile} set={set} uploadFile={uploadFile} uploadRaw={uploadRaw} showToast={showToast} />}
         {panel === 'general' && <GeneralPanel profile={profile} set={set} setProfile={setProfile} />}
         {panel === 'layout' && <LayoutPanel profile={profile} set={set} />}
-        {panel === 'typography' && <TypographyPanel profile={profile} set={set} />}
+        {panel === 'typography' && <TypographyPanel profile={profile} set={set} uploadRaw={uploadRaw} showToast={showToast} />}
+        {panel === 'effects' && <EffectsPanel profile={profile} set={set} />}
         {panel === 'entrance' && <EntrancePanel profile={profile} set={set} />}
         {panel === 'colors' && <ColorsPanel profile={profile} set={set} />}
         {panel === 'links' && <LinksPanel profile={profile} setProfile={setProfile} />}
@@ -151,8 +160,54 @@ function UploadRow({ field, accept, url, onUrlChange, onUpload }) {
   );
 }
 
-function AssetsPanel({ profile, set, uploadFile }) {
+function AssetsPanel({ profile, set, uploadFile, uploadRaw, showToast }) {
   const a = profile.assets;
+  const [cropSrc, setCropSrc] = useState(null);
+  const cropObjectUrl = useRef(null);
+
+  function cleanupCropObjectUrl() {
+    if (cropObjectUrl.current) {
+      URL.revokeObjectURL(cropObjectUrl.current);
+      cropObjectUrl.current = null;
+    }
+  }
+
+  function handleAvatarFile(file) {
+    const objUrl = URL.createObjectURL(file);
+    const probe = new Image();
+    probe.onload = () => {
+      const ratio = probe.naturalWidth / probe.naturalHeight;
+      if (ratio < 0.92 || ratio > 1.08) {
+        cropObjectUrl.current = objUrl;
+        setCropSrc(objUrl);
+      } else {
+        URL.revokeObjectURL(objUrl);
+        uploadFile('avatar', file);
+      }
+    };
+    probe.onerror = () => { URL.revokeObjectURL(objUrl); uploadFile('avatar', file); };
+    probe.src = objUrl;
+  }
+
+  function openCropOnExisting() {
+    if (!a.avatarUrl) { showToast('Upload or paste an avatar first.', true); return; }
+    cropObjectUrl.current = null; // remote URL, nothing to revoke
+    setCropSrc(a.avatarUrl);
+  }
+
+  async function handleCropped(blob) {
+    setCropSrc(null);
+    cleanupCropObjectUrl();
+    const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+    const url = await uploadRaw('avatar', file);
+    if (url) { set('assets', 'avatarUrl', url); showToast('Uploaded'); }
+  }
+
+  function handleCropCancel() {
+    setCropSrc(null);
+    cleanupCropObjectUrl();
+  }
+
   return (
     <div>
       <p className="hint-text" style={{ marginBottom: 16 }}>Uploading a file stores it for you and always works. A pasted link only works if it's already a direct, publicly embeddable file.</p>
@@ -174,13 +229,29 @@ function AssetsPanel({ profile, set, uploadFile }) {
       </div>
       <div className="field">
         <label>Avatar</label>
-        <UploadRow field="avatar" accept="image/*" url={a.avatarUrl} onUrlChange={(v) => set('assets', 'avatarUrl', v)} onUpload={(f) => uploadFile('avatar', f)} />
+        <input type="text" value={a.avatarUrl} onChange={(e) => set('assets', 'avatarUrl', e.target.value)} placeholder="https://... or upload below" />
+        <div className="upload-row">
+          <AvatarUploadButtons onFile={handleAvatarFile} onCropExisting={openCropOnExisting} />
+        </div>
       </div>
       <div className="field">
         <label>Custom cursor</label>
         <UploadRow field="cursor" accept="image/*" url={a.cursorUrl} onUrlChange={(v) => set('assets', 'cursorUrl', v)} onUpload={(f) => uploadFile('cursor', f)} />
       </div>
+
+      {cropSrc && <Cropper src={cropSrc} onCancel={handleCropCancel} onCropped={handleCropped} />}
     </div>
+  );
+}
+
+function AvatarUploadButtons({ onFile, onCropExisting }) {
+  const fileRef = useRef(null);
+  return (
+    <>
+      <button type="button" className="btn btn-sm" onClick={() => fileRef.current.click()}>Upload file</button>
+      <button type="button" className="btn btn-sm" onClick={onCropExisting}>Crop image</button>
+      <input ref={fileRef} type="file" accept="image/*" onChange={(e) => { const f = e.target.files[0]; if (f) onFile(f); e.target.value = ''; }} />
+    </>
   );
 }
 
@@ -251,6 +322,7 @@ function GeneralPanel({ profile, set, setProfile }) {
             <option value="scanlines">Scanlines</option>
             <option value="grain">Grain</option>
             <option value="vignette">Vignette</option>
+            <option value="particles">Particles</option>
           </select>
         </div>
         <div className="field">
@@ -311,8 +383,23 @@ function LayoutPanel({ profile, set }) {
   );
 }
 
-function TypographyPanel({ profile, set }) {
+function TypographyPanel({ profile, set, uploadRaw, showToast }) {
   const g = profile.general;
+  const a = profile.assets;
+  const fileRef = useRef(null);
+
+  async function handleFontFile(file) {
+    if (!/\.(ttf|otf|woff|woff2)$/i.test(file.name)) {
+      showToast('Use a .ttf, .otf, .woff or .woff2 file', true);
+      return;
+    }
+    const url = await uploadRaw('font', file);
+    if (!url) return;
+    set('assets', 'fontUrl', url);
+    set('assets', 'fontFileName', file.name);
+    showToast('Font uploaded');
+  }
+
   return (
     <div>
       <div className="field">
@@ -323,9 +410,37 @@ function TypographyPanel({ profile, set }) {
           <option value="mono">JetBrains Mono</option>
           <option value="playfair">Playfair Display</option>
           <option value="poppins">Poppins</option>
+          <option value="custom">Custom upload</option>
         </select>
       </div>
+      {g.fontChoice === 'custom' && (
+        <div className="field">
+          <label>Custom font file (.ttf / .otf / .woff / .woff2)</label>
+          <div className="upload-row">
+            <button type="button" className="btn btn-sm" onClick={() => fileRef.current.click()}>Upload font</button>
+            <input ref={fileRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={(e) => { const f = e.target.files[0]; if (f) handleFontFile(f); e.target.value = ''; }} />
+            <span className="upload-status">{a.fontFileName ? `Using: ${a.fontFileName}` : ''}</span>
+          </div>
+        </div>
+      )}
       <p className="hint-text">Applies to your display name and description.</p>
+    </div>
+  );
+}
+
+function EffectsPanel({ profile, set }) {
+  const g = profile.general;
+  return (
+    <div>
+      <div className="field">
+        <label>Cursor trail</label>
+        <select value={g.cursorTrail || 'none'} onChange={(e) => set('general', 'cursorTrail', e.target.value)}>
+          <option value="none">None</option>
+          <option value="sparkle">Sparkle</option>
+          <option value="ribbon">Ribbon</option>
+        </select>
+      </div>
+      <p className="hint-text">Follows the visitor's mouse in your accent color. The "Particles" background effect (in General) also runs behind your card.</p>
     </div>
   );
 }
