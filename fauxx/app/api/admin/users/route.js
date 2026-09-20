@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isAdminFromRequestCookies } from '../../../../lib/session';
 import { hashPassword } from '../../../../lib/auth';
-import { createUser, listUserSummaries, normalizeUsername, deleteUser } from '../../../../lib/kv';
+import { createUser, listUserSummaries, normalizeUsername, deleteUser, logAdminAction } from '../../../../lib/kv';
 
 export async function GET(request) {
   if (!isAdminFromRequestCookies(request)) {
@@ -34,6 +34,7 @@ export async function POST(request) {
   try {
     const passwordHash = await hashPassword(password);
     await createUser(clean, passwordHash);
+    await logAdminAction('create_user', clean);
     return NextResponse.json({ ok: true, username: clean });
   } catch (err) {
     return NextResponse.json({ error: err.message || 'Could not create that account' }, { status: 400 });
@@ -49,5 +50,6 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Missing username' }, { status: 400 });
   }
   await deleteUser(username);
+  await logAdminAction('delete_user', normalizeUsername(username));
   return NextResponse.json({ ok: true });
 }

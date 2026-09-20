@@ -4,10 +4,13 @@ import bcrypt from 'bcryptjs';
 const SECRET = process.env.SESSION_SECRET || '';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
-if (!SECRET && process.env.NODE_ENV === 'production') {
-  // Fails loudly at request time (via sign/verify) rather than silently
-  // issuing forgeable sessions if the env var was never set.
-  console.error('SESSION_SECRET is not set — sessions cannot be signed safely.');
+function requireSecret() {
+  if (!SECRET) {
+    // Thrown at request time (not at module load) so a missing secret fails
+    // the specific request loudly instead of silently signing/verifying
+    // sessions with an empty, guessable HMAC key.
+    throw new Error('SESSION_SECRET is not set — refusing to sign or verify sessions.');
+  }
 }
 
 export async function hashPassword(password) {
@@ -19,6 +22,15 @@ export async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+// A syntactically valid bcrypt hash that matches no real password. Used so
+// login always pays the same bcrypt cost whether or not the username
+// exists — otherwise a nonexistent user returns measurably faster than a
+// wrong password, which leaks which usernames are registered.
+const DUMMY_HASH = bcrypt.hashSync('no-such-user-timing-guard', 10);
+export async function verifyPasswordTimingSafe(password, hash) {
+  return verifyPassword(password, hash || DUMMY_HASH);
+}
+
 function hmac(value) {
   return crypto.createHmac('sha256', SECRET).update(value).digest('hex');
 }
@@ -26,6 +38,7 @@ function hmac(value) {
 // Session token shape: base64(payloadJSON).hmacHex
 // payload = { sub: username, role: 'user'|'admin', exp: unixSeconds }
 export function signSession(payload) {
+  requireSecret(); // refuse to issue a session rather than sign it with an empty key
   const full = { ...payload, exp: Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS };
   const encoded = Buffer.from(JSON.stringify(full)).toString('base64url');
   const sig = hmac(encoded);
@@ -33,6 +46,7 @@ export function signSession(payload) {
 }
 
 export function verifySession(token) {
+  if (!SECRET) return null; // fail safe: no secret means nobody is verified, not a crashed page
   if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const [encoded, sig] = token.split('.');
   if (!encoded || !sig) return null;

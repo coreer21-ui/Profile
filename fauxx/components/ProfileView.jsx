@@ -19,6 +19,7 @@ export default function ProfileView({ username, profile, isOwner }) {
   const descElRef = useRef(null);
   const [gateGone, setGateGone] = useState(false);
   const [gateHidden, setGateHidden] = useState(g.enterEnabled === false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   // CSS variables driven by saved colors/layout.
   useEffect(() => {
@@ -207,6 +208,19 @@ export default function ProfileView({ username, profile, isOwner }) {
     return () => { clearInterval(id); document.title = g.displayName || username; };
   }, [o.animatedTitle, g.description, g.displayName, username]);
 
+  // Lightbox keyboard controls.
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    function onKey(e) {
+      const count = (profile.gallery || []).length;
+      if (e.key === 'Escape') setLightboxIndex(null);
+      else if (e.key === 'ArrowLeft' && count > 1) setLightboxIndex((i) => (i - 1 + count) % count);
+      else if (e.key === 'ArrowRight' && count > 1) setLightboxIndex((i) => (i + 1) % count);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lightboxIndex, profile.gallery]);
+
   function attemptAutoplay() {
     const audio = audioRef.current;
     if (!audio || !audio.src) return;
@@ -308,12 +322,36 @@ export default function ProfileView({ username, profile, isOwner }) {
             <div className="gallery-grid">
               {profile.gallery.map((url, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={url} alt="" />
+                <img key={i} src={url} alt="" onClick={() => setLightboxIndex(i)} style={{ cursor: 'pointer' }} />
               ))}
             </div>
           )}
         </div>
       </main>
+
+      {lightboxIndex !== null && (profile.gallery || []).length > 0 && (
+        <div className="lightbox" onClick={() => setLightboxIndex(null)}>
+          {profile.gallery.length > 1 && (
+            <button
+              type="button"
+              className="lightbox-nav prev"
+              onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i - 1 + profile.gallery.length) % profile.gallery.length); }}
+              aria-label="Previous photo"
+            >‹</button>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={profile.gallery[lightboxIndex]} alt="" onClick={(e) => e.stopPropagation()} />
+          {profile.gallery.length > 1 && (
+            <button
+              type="button"
+              className="lightbox-nav next"
+              onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i + 1) % profile.gallery.length); }}
+              aria-label="Next photo"
+            >›</button>
+          )}
+          <button type="button" className="lightbox-close" onClick={() => setLightboxIndex(null)} aria-label="Close">✕</button>
+        </div>
+      )}
 
       <audio ref={audioRef} src={a.audioUrl || undefined} loop />
 

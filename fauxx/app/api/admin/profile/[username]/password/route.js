@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAdminFromRequestCookies } from '../../../../../../lib/session';
-import { getUserRecord, saveUserRecord, normalizeUsername } from '../../../../../../lib/kv';
+import { getUserRecord, saveUserRecord, normalizeUsername, logAdminAction } from '../../../../../../lib/kv';
 import { hashPassword } from '../../../../../../lib/auth';
 
 export async function POST(request, { params }) {
@@ -19,5 +19,6 @@ export async function POST(request, { params }) {
 
   record.passwordHash = await hashPassword(newPassword);
   await saveUserRecord(username, record);
+  await logAdminAction('password_reset', username);
   return NextResponse.json({ ok: true });
 }

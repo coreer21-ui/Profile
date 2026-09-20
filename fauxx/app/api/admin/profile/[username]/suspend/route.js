@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAdminFromRequestCookies } from '../../../../../../lib/session';
-import { setSuspended, normalizeUsername } from '../../../../../../lib/kv';
+import { setSuspended, normalizeUsername, logAdminAction } from '../../../../../../lib/kv';
 
 export async function POST(request, { params }) {
   if (!isAdminFromRequestCookies(request)) {
@@ -11,6 +11,7 @@ export async function POST(request, { params }) {
 
   try {
     await setSuspended(username, !!suspended);
+    await logAdminAction(suspended ? 'suspend' : 'unsuspend', username);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err.message || 'Could not update account' }, { status: 400 });

@@ -147,10 +147,58 @@ export default function AdminPage() {
             onChanged={loadUsers}
           />
         ))}
+
+        <ActivityLog />
       </div>
     </div>
   );
 }
+
+function actionLabel(entry) {
+  switch (entry.action) {
+    case 'create_user': return `created the account "${entry.username}"`;
+    case 'delete_user': return `deleted the account "${entry.username}"`;
+    case 'suspend': return `suspended "${entry.username}"`;
+    case 'unsuspend': return `unsuspended "${entry.username}"`;
+    case 'password_reset': return `reset the password for "${entry.username}"`;
+    case 'badge_grant': return `granted a badge to "${entry.username}"`;
+    case 'badge_revoke': return `revoked a badge from "${entry.username}"`;
+    default: return `${entry.action} — ${entry.username}`;
+  }
+}
+
+function ActivityLog() {
+  const [log, setLog] = useState(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open || log !== null) return;
+    fetch('/api/admin/log')
+      .then((r) => r.json())
+      .then((data) => setLog(data.log || []))
+      .catch(() => setLog([]));
+  }, [open, log]);
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <button type="button" className="btn btn-sm" onClick={() => setOpen(!open)}>
+        {open ? 'Hide activity log' : 'Show activity log'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {log === null && <p className="hint-text">Loading…</p>}
+          {log && log.length === 0 && <p className="hint-text">No admin activity recorded yet.</p>}
+          {log && log.map((entry, i) => (
+            <div key={i} className="hint-text" style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              {new Date(entry.ts).toLocaleString()} — you {actionLabel(entry)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function timeAgo(iso) {
   if (!iso) return '—';
