@@ -1,105 +1,42 @@
 import { NextResponse } from 'next/server';
-import { handleUpload } from '@vercel/blob/client';
-import {
-  getUserFromRequestCookies,
-  isAdminFromRequestCookies
-} from '../../../lib/session';
+import { put } from '@vercel/blob';
+import { getUserFromRequestCookies, isAdminFromRequestCookies } from '../../../lib/session';
 import { normalizeUsername } from '../../../lib/kv';
 
-const MAX_BYTES = 100 * 1024 * 1024;
-
-const ALLOWED_FIELDS = new Set([
-  'background',
-  'avatar',
-  'audio',
-  'cursor',
-  'font',
-  'gallery'
-]);
-
-const ALLOWED_CONTENT_TYPES = [
-  'image/*',
-  'audio/*',
-  'video/*',
-  'font/*',
-  'application/octet-stream'
-];
+const MAX_BYTES = 8 * 1024 * 1024; // 8MB per file
+const ALLOWED_FIELDS = new Set(['background', 'avatar', 'audio', 'cursor', 'font', 'gallery']);
 
 export async function POST(request) {
-  const body = await request.json();
+  const formData = await request.formData().catch(() => null);
+  const file = formData?.get('file');
+  const field = formData?.get('field');
 
-  try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-
-      onBeforeGenerateToken: async (
-        pathname,
-        clientPayload,
-        multipart
-      ) => {
-        let payload = {};
-
-        try {
-          payload = JSON.parse(clientPayload || '{}');
-        } catch {
-          throw new Error('Invalid upload request');
-        }
-
-        const selfUsername = getUserFromRequestCookies(request);
-        const isAdmin = isAdminFromRequestCookies(request);
-
-        let username = selfUsername;
-
-        // Admins can upload for another user's profile.
-        if (!username && isAdmin) {
-          username = normalizeUsername(payload.username);
-        }
-
-        if (!username) {
-          throw new Error('Not logged in');
-        }
-
-        username = normalizeUsername(username);
-
-        const field = payload.field;
-
-        if (!ALLOWED_FIELDS.has(field)) {
-          throw new Error('Invalid field');
-        }
-
-        return {
-          allowedContentTypes: ALLOWED_CONTENT_TYPES,
-          maximumSizeInBytes: MAX_BYTES,
-          addRandomSuffix: false,
-
-          tokenPayload: JSON.stringify({
-            username,
-            field
-          })
-        };
-      },
-
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('Blob upload completed:', {
-          url: blob.url,
-          tokenPayload
-        });
-      }
-    });
-
-    return NextResponse.json(jsonResponse);
-  } catch (error) {
-    console.error('Blob client upload error:', error);
-
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Upload failed'
-      },
-      { status: 400 }
-    );
+  // A normal user always uploads to their own namespace. An admin editing
+  // someone else's page on their behalf must say whose page it's for.
+  const selfUsername = getUserFromRequestCookies(request);
+  let username = selfUsername;
+  if (!username && isAdminFromRequestCookies(request)) {
+    username = normalizeUsername(formData?.get('username'));
   }
+  if (!username) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+
+  if (!file || typeof file === 'string') {
+    return NextResponse.json({ error: 'No file received' }, { status: 400 });
+  }
+  if (!ALLOWED_FIELDS.has(field)) {
+    return NextResponse.json({ error: 'Invalid field' }, { status: 400 });
+  }
+  if (file.size > MAX_BYTES) {
+    return NextResponse.json({ error: 'That file is over 8MB' }, { status: 400 });
+  }
+
+  const safeName = (file.name || 'upload').replace(/[^a-zA-Z0-9.\-_]/g, '');
+  const path = `${username}/${field}-${Date.now()}-${safeName}`;
+
+  const blob = await put(path, file, {
+    access: 'public',
+    addRandomSuffix: false
+  });
+
+  return NextResponse.json({ ok: true, url: blob.url });
 }
